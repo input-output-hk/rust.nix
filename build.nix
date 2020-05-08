@@ -37,7 +37,7 @@
 , gitDependencies
 , pname
 , version
-, rustc
+, buildPackages
 , cargo
 , override
 , nativeBuildInputs
@@ -194,7 +194,7 @@ let
     inherit builtDependencies;
 
     # some environment variables
-    RUSTC = "${rustc}/bin/rustc";
+    RUSTC = "${buildPackages.rustc}/bin/rustc";
     cargo_release = lib.optionalString release "--release";
     cargo_options = cargoOptions;
     cargo_build_options = cargoBuildOptions;
@@ -277,7 +277,7 @@ let
               --executability $dep/target/ target
           fi
           if [ -f "$dep/target.tar.zst" ]; then
-            ${zstd}/bin/zstd -d "$dep/target.tar.zst" --stdout | tar -x
+            ${zstd.__spliced.buildBuild}/bin/zstd -d "$dep/target.tar.zst" --stdout | tar -x
           fi
 
           if [ -d "$dep/target" ]; then
@@ -381,7 +381,7 @@ let
         mkdir -p $out
         ${if compressTarget then
         ''
-          tar -c target | ${zstd}/bin/zstd -o $out/target.tar.zst
+          tar -c target | ${zstd.__spliced.buildBuild}/bin/zstd -o $out/target.tar.zst
         '' else
         ''
           cp -r target $out

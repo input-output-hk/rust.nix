@@ -32,7 +32,9 @@ let
   # [naersk]: hard code two targets (musl (on Linux) + wasm32)
   targets =
     [
-      "${rust.toRustTarget stdenv.buildPlatform}"
+      #"${rust.toRustTarget stdenv.buildPlatform}"
+      # UGLY HACK
+      "x86_64-pc-windows-gnu"
       "wasm32-unknown-unknown"
     ]
     # on Linux we also build the musl target for fully static executables
@@ -51,7 +53,7 @@ let
   # For use at runtime
   llvmShared = llvm_9.override { enableSharedLibraries = true; };
 in stdenv.mkDerivation rec {
-  pname = "rustc";
+  pname = "naersk-rustc";
   inherit version;
 
   src = fetchurl {

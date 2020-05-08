@@ -7,7 +7,7 @@
 , remarshal
 , rsync
 , runCommand
-, rustc
+, buildPackages
 , stdenv
 , writeText
 , zstd
