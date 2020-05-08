@@ -277,7 +277,7 @@ let
               --executability $dep/target/ target
           fi
           if [ -f "$dep/target.tar.zst" ]; then
-            ${zstd.__spliced.buildBuild}/bin/zstd -d "$dep/target.tar.zst" --stdout | tar -x
+            ${zstd.__spliced.buildBuild or zstd}/bin/zstd -d "$dep/target.tar.zst" --stdout | tar -x
           fi
 
           if [ -d "$dep/target" ]; then
@@ -381,7 +381,7 @@ let
         mkdir -p $out
         ${if compressTarget then
         ''
-          tar -c target | ${zstd.__spliced.buildBuild}/bin/zstd -o $out/target.tar.zst
+          tar -c target | ${zstd.__spliced.buildBuild or zstd}/bin/zstd -o $out/target.tar.zst
         '' else
         ''
           cp -r target $out
