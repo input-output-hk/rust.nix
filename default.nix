@@ -11,6 +11,9 @@
 , stdenv
 , writeText
 , zstd
+# cross logic
+, pkgsBuildTarget
+, targetPlatform
 }@defaultBuildAttrs:
 
 let

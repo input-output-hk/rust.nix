@@ -58,6 +58,9 @@
 , fetchurl
 , lndir
 , userAttrs
+
+, pkgsBuildTarget
+, targetPlatform
 }:
 
 let
@@ -145,6 +148,14 @@ let
     # The cargo config with source replacement. Replaces both crates.io crates
     # and git dependencies.
     cargoconfig = builtinz.toTOML {
+      build.target = buildPackages.rust.toRustTarget targetPlatform;
+      target.${buildPackages.rust.toRustTarget targetPlatform} =
+        (
+          { linker = "${pkgsBuildTarget.targetPackages.stdenv.cc}/bin/${pkgsBuildTarget.targetPackages.stdenv.cc.targetPrefix}cc"; }
+          // stdenv.lib.optionalAttrs (stdenv.hostPlatform.isMusl && stdenv.hostPlatform.isAarch64)
+          # https://github.com/rust-lang/rust/issues/46651#issuecomment-433611633
+          { rustflags = [ "-C" "target-feature=+crt-static" "-C" "link-arg=-lgcc" ]; }
+        );
       source = {
         crates-io = { replace-with = "nix-sources"; };
         nix-sources = {
@@ -183,6 +194,9 @@ let
       # needed at various steps in the build
       jq
       rsync
+      # rust needs `cc` availabe when cross compiling. Hence
+      # cc needs to be a nativeBuildInput.
+      buildPackages.pkgsBuildBuild.targetPackages.stdenv.cc
     ] ++ nativeBuildInputs;
 
     buildInputs = stdenv.lib.optionals stdenv.isDarwin [
