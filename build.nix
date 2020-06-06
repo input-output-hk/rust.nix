@@ -94,7 +94,7 @@ let
     { nativeBuildInputs = [ jq ]; }
     ''
       log() {
-        >&2 echo "[naersk]" "$@"
+        >&2 echo "[rust.nix]" "$@"
       }
 
       mkdir -p $out
@@ -207,6 +207,18 @@ let
 
     inherit builtDependencies;
 
+    # So for windows we'll need to do some threading hand stands.
+    # We need mingw_w64_pthreads, as rust will forcably link -lpthread
+    # but we'll also need to always link mcfgthread, as that's baked into
+    # gcc.
+    #
+    # See also overlays/rust-windows-threads.nix. Both should be in sync.
+    NIX_x86_64_w64_mingw32_LDFLAGS = stdenv.lib.optionals targetPlatform.isWindows [
+        "-L${pkgsBuildTarget.targetPackages.windows.mingw_w64_pthreads.overrideDerivation (_ : { dontDisableStatic = true; })}/lib"
+        "-L${pkgsBuildTarget.targetPackages.windows.mcfgthreads}/lib"
+        "-lmcfgthread"
+    ];
+
     # some environment variables
     RUSTC = "${buildPackages.rustc}/bin/rustc";
     cargo_release = lib.optionalString release "--release";
@@ -225,7 +237,7 @@ let
       }
 
       log() {
-        >&2 echo "[naersk]" "$@"
+        >&2 echo "[rust.nix]" "$@"
       }
 
       cargo_build_output_json=$(mktemp)

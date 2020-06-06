@@ -1,6 +1,4 @@
-# Naersk
-
-[![GitHub Actions](https://github.com/nmattia/naersk/workflows/test/badge.svg?branch=master)](https://github.com/nmattia/naersk/actions)
+# rust.nix
 
 Nix support for building [cargo] crates.
 
@@ -13,17 +11,16 @@ Nix support for building [cargo] crates.
 Use [niv]:
 
 ``` shell
-$ niv add nmattia/naersk
+$ niv add input-output-hk/rust.nix
 ```
 
 And then
 
 ``` nix
 let
-    pkgs = import <nixpkgs> {};
     sources = import ./nix/sources.nix;
-    naersk = pkgs.callPackage sources.naersk {};
-in naersk.buildPackage ./path/to/rust
+    pkgs = import <nixpkgs> { overlays = [ (import sources."rust.nix") ]; };
+in pkgs.rust-nix.buildPackage ./path/to/rust
 ```
 
 _NOTE_: `./path/to/rust/` should contain a `Cargo.lock`.
@@ -36,7 +33,7 @@ is_ to `stdenv.mkDerivation`. When the argument passed in _not_ an attribute
 set, e.g.
 
 ``` nix
-naersk.buildPackage theArg
+pkgs.rust-nix.buildPackage theArg
 ```
 
 it is converted to an attribute set equivalent to `{ root = theArg; }`.
@@ -45,10 +42,10 @@ it is converted to an attribute set equivalent to `{ root = theArg; }`.
 | - | - |
 | `name` | The name of the derivation. |
 | `version` | The version of the derivation. |
-| `src` | Used by `naersk` as source input to the derivation. When `root` is not set, `src` is also used to discover the `Cargo.toml` and `Cargo.lock`. |
-| `root` | Used by `naersk` to read the `Cargo.toml` and `Cargo.lock` files. May be different from `src`. When `src` is not set, `root` is (indirectly) used as `src`. |
+| `src` | Used by `rust-nix` as source input to the derivation. When `root` is not set, `src` is also used to discover the `Cargo.toml` and `Cargo.lock`. |
+| `root` | Used by `rust-nix` to read the `Cargo.toml` and `Cargo.lock` files. May be different from `src`. When `src` is not set, `root` is (indirectly) used as `src`. |
 | `cargoBuild` | The command to use for the build. The argument must be a function modifying the default value. <br/> Default: `''cargo $cargo_options build $cargo_build_options >> $cargo_build_output_json''` |
-| `cargoBuildOptions` | Options passed to cargo build, i.e. `cargo build <OPTS>`. These options can be accessed during the build through the environment variable `cargo_build_options`. <br/> Note: naersk relies on the `--out-dir out` option and the `--message-format` option. The `$cargo_message_format` variable is set based on the cargo version.<br/> Note: these values are not (shell) escaped, meaning that you can use environment variables but must be careful when introducing e.g. spaces. <br/> The argument must be a function modifying the default value. <br/> Default: `[ "$cargo_release" ''-j "$NIX_BUILD_CORES"'' "--out-dir" "out" "--message-format=$cargo_message_format" ]` |
+| `cargoBuildOptions` | Options passed to cargo build, i.e. `cargo build <OPTS>`. These options can be accessed during the build through the environment variable `cargo_build_options`. <br/> Note: rust.nix relies on the `--out-dir out` option and the `--message-format` option. The `$cargo_message_format` variable is set based on the cargo version.<br/> Note: these values are not (shell) escaped, meaning that you can use environment variables but must be careful when introducing e.g. spaces. <br/> The argument must be a function modifying the default value. <br/> Default: `[ "$cargo_release" ''-j "$NIX_BUILD_CORES"'' "--out-dir" "out" "--message-format=$cargo_message_format" ]` |
 | `remapPathPrefix` | When `true`, rustc remaps the (`/nix/store`) source paths to `/sources` to reduce the number of dependencies in the closure. Default: `true` |
 | `cargoTestCommands` | The commands to run in the `checkPhase`. Do not forget to set [`doCheck`](https://nixos.org/nixpkgs/manual/#ssec-check-phase). The argument must be a function modifying the default value. <br/> Default: `[ ''cargo $cargo_options test $cargo_test_options'' ]` |
 | `cargoTestOptions` | Options passed to cargo test, i.e. `cargo test <OPTS>`. These options can be accessed during the build through the environment variable `cargo_test_options`. <br/> Note: these values are not (shell) escaped, meaning that you can use environment variables but must be careful when introducing e.g. spaces. <br/> The argument must be a function modifying the default value. <br/> Default: `[ "$cargo_release" ''-j "$NIX_BUILD_CORES"'' ]` |
@@ -71,19 +68,21 @@ it is converted to an attribute set equivalent to `{ root = theArg; }`.
 | `copyTarget` | When true, the `target/` directory is copied to `$out`. Default: `false` |
 | `usePureFromTOML` | Whether to use the `fromTOML` built-in or not. When set to `false` the python package `remarshal` is used instead (in a derivation) and the JSON output is read with `builtins.fromJSON`. This is a workaround for old versions of Nix. May be used safely from Nix 2.3 onwards where all bugs in `builtins.fromTOML` seem to have been fixed. Default: `true` |
 
-## Using naersk with nixpkgs-mozilla
+## Using rust.nix with nixpkgs-mozilla
 
 The [nixpkgs-mozilla](https://github.com/mozilla/nixpkgs-mozilla) overlay
 provides nightly versions of `rustc` and `cargo`. Below is an example setup for
-using it with naersk:
+using it with rust.nix:
 
 ``` nix
 let
   sources = import ./nix/sources.nix;
   nixpkgs-mozilla = import sources.nixpkgs-mozilla;
+  rust-nix = import sources.rust-nix;
   pkgs = import sources.nixpkgs {
     overlays =
       [
+        rust-nix
         nixpkgs-mozilla
         (self: super:
             {
@@ -93,9 +92,8 @@ let
         )
       ];
   };
-  naersk = pkgs.callPackage sources.naersk {};
 in
-naersk.buildPackage ./my-package
+pkgs.rust-nix.buildPackage ./my-package
 ```
 
 [cargo]: https://crates.io/
