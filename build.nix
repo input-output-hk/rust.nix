@@ -12,6 +12,9 @@
   #| Whether or not to copy binaries to $out/bin
 , copyBins
 , copyBinsFilter
+  #| Whether or not to copy libraries to $out/bin
+, copyLibs
+, copyLibsFilter
 , doDoc
 , doDocFail
 , copyDocsToSeparateOutput
@@ -34,7 +37,7 @@
 , gitDependencies
 , pname
 , version
-, rustc
+, buildPackages
 , cargo
 , override
 , nativeBuildInputs
@@ -55,6 +58,9 @@
 , fetchurl
 , lndir
 , userAttrs
+
+, pkgsBuildTarget
+, targetPlatform
 }:
 
 let
@@ -88,7 +94,7 @@ let
     { nativeBuildInputs = [ jq ]; }
     ''
       log() {
-        >&2 echo "[naersk]" "$@"
+        >&2 echo "[rust.nix]" "$@"
       }
 
       mkdir -p $out
@@ -142,6 +148,14 @@ let
     # The cargo config with source replacement. Replaces both crates.io crates
     # and git dependencies.
     cargoconfig = builtinz.toTOML {
+      build.target = buildPackages.rust.toRustTarget targetPlatform;
+      target.${buildPackages.rust.toRustTarget targetPlatform} =
+        (
+          { linker = "${pkgsBuildTarget.targetPackages.stdenv.cc}/bin/${pkgsBuildTarget.targetPackages.stdenv.cc.targetPrefix}cc"; }
+          // stdenv.lib.optionalAttrs (stdenv.hostPlatform.isMusl && stdenv.hostPlatform.isAarch64)
+          # https://github.com/rust-lang/rust/issues/46651#issuecomment-433611633
+          { rustflags = [ "-C" "target-feature=+crt-static" "-C" "link-arg=-lgcc" ]; }
+        );
       source = {
         crates-io = { replace-with = "nix-sources"; };
         nix-sources = {
@@ -180,6 +194,9 @@ let
       # needed at various steps in the build
       jq
       rsync
+      # rust needs `cc` availabe when cross compiling. Hence
+      # cc needs to be a nativeBuildInput.
+      buildPackages.pkgsBuildBuild.targetPackages.stdenv.cc
     ] ++ nativeBuildInputs;
 
     buildInputs = stdenv.lib.optionals stdenv.isDarwin [
@@ -190,13 +207,26 @@ let
 
     inherit builtDependencies;
 
+    # So for windows we'll need to do some threading hand stands.
+    # We need mingw_w64_pthreads, as rust will forcably link -lpthread
+    # but we'll also need to always link mcfgthread, as that's baked into
+    # gcc.
+    #
+    # See also overlays/rust-windows-threads.nix. Both should be in sync.
+    NIX_x86_64_w64_mingw32_LDFLAGS = stdenv.lib.optionals targetPlatform.isWindows [
+        "-L${pkgsBuildTarget.targetPackages.windows.mingw_w64_pthreads.overrideDerivation (_ : { dontDisableStatic = true; })}/lib"
+        "-L${pkgsBuildTarget.targetPackages.windows.mcfgthreads}/lib"
+        "-lmcfgthread"
+    ];
+
     # some environment variables
-    RUSTC = "${rustc}/bin/rustc";
+    RUSTC = "${buildPackages.rustc}/bin/rustc";
     cargo_release = lib.optionalString release "--release";
     cargo_options = cargoOptions;
     cargo_build_options = cargoBuildOptions;
     cargo_test_options = cargoTestOptions;
     cargo_bins_jq_filter = copyBinsFilter;
+    cargo_libs_jq_filter = copyLibsFilter;
 
     configurePhase = ''
       runHook preConfigure
@@ -207,7 +237,7 @@ let
       }
 
       log() {
-        >&2 echo "[naersk]" "$@"
+        >&2 echo "[rust.nix]" "$@"
       }
 
       cargo_build_output_json=$(mktemp)
@@ -273,7 +303,7 @@ let
               --executability $dep/target/ target
           fi
           if [ -f "$dep/target.tar.zst" ]; then
-            ${zstd}/bin/zstd -d "$dep/target.tar.zst" --stdout | tar -x
+            ${zstd.__spliced.buildBuild or zstd}/bin/zstd -d "$dep/target.tar.zst" --stdout | tar -x
           fi
 
           if [ -d "$dep/target" ]; then
@@ -339,7 +369,7 @@ let
         mkdir -p $out/bin
         if [ -f "$cargo_build_output_json" ]
         then
-          log "Using file $cargo_build_output_json to retrieve build products"
+          log "Using file $cargo_build_output_json to retrieve build (executable) products"
           while IFS= read -r to_copy; do
             bin_path=$(jq -cMr '.executable' <<<"$to_copy")
             bin_name=$(jq -cMr '.target.name' <<<"$to_copy")
@@ -352,13 +382,32 @@ let
             -not -name '*.so' -a -not -name '*.dylib' \
             -exec cp {} $out/bin \;
         fi
-      ''}
+        ''}
+        ${lib.optionalString copyLibs ''
+        mkdir -p $out/lib
+        if [ -f "$cargo_build_output_json" ]
+        then
+          log "Using file $cargo_build_output_json to retrieve build (library) products"
+          while IFS= read -r to_copy; do
+            lib_paths=$(jq -cMr '.filenames[]' <<<"$to_copy")
+            for lib in $lib_paths; do
+              log "found library $lib"
+              cp "$lib" "$out/lib/"
+            done
+          done < <(jq -cMr "$cargo_libs_jq_filter" <"$cargo_build_output_json")
+        else
+          log "$cargo_build_output_json: file wasn't written, using less reliable copying method"
+          find out -type f \
+            -name '*.so' -or -name '*.dylib' -or -name '*.a' \
+            -exec cp {} $out/lib \;
+        fi
+        ''}
 
         ${lib.optionalString copyTarget ''
         mkdir -p $out
         ${if compressTarget then
         ''
-          tar -c target | ${zstd}/bin/zstd -o $out/target.tar.zst
+          tar -c target | ${zstd.__spliced.buildBuild or zstd}/bin/zstd -o $out/target.tar.zst
         '' else
         ''
           cp -r target $out
@@ -423,13 +472,14 @@ let
       args = removeAttrs args_ [ "name" "postBuild" ]
         // { inherit preferLocalBuild allowSubstitutes;
              passAsFile = [ "paths" ];
+             nativeBuildInputs = [ lndir ];
            }; # pass the defaults
     in runCommand name args
       ''
         mkdir -p $out
 
         for i in $(cat $pathsPath); do
-          ${lndir}/bin/lndir -silent $i $out
+          lndir -silent $i $out
         done
         ${postBuild}
       '';
