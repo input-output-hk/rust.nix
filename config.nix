@@ -70,8 +70,10 @@ let
     # `cargo_options`. <br/>
     # Note: these values are not (shell) escaped, meaning that you can use
     # environment variables but must be careful when introducing e.g. spaces. <br/>
+    # Note 2: if you want to use nightly rustc/cargo, you may want to pass
+    # `[ "-Z" "unstable-options" ]`.
     cargoOptions =
-      allowFun attrs0 "cargoOptions" [ "-Z" "unstable-options" ];
+      allowFun attrs0 "cargoOptions" [ ];
 
     # When true, `cargo doc` is run and a new output `doc` is generated.
     doDoc = attrs0.doDoc or false;
