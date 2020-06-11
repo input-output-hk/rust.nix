@@ -12,9 +12,14 @@
   #| Whether or not to copy binaries to $out/bin
 , copyBins
 , copyBinsFilter
-  #| Whether or not to copy libraries to $out/bin
+  #| Whether or not to copy libraries to $out/{lib,bin}
 , copyLibs
 , copyLibsFilter
+# Copy static libs
+, enableStatic ? true
+# Copy shared libs
+, enableShared ? true
+
 , doDoc
 , doDocFail
 , copyDocsToSeparateOutput
@@ -61,6 +66,7 @@
 
 , pkgsBuildTarget
 , targetPlatform
+
 }:
 
 let
@@ -391,8 +397,27 @@ let
           while IFS= read -r to_copy; do
             lib_paths=$(jq -cMr '.filenames[]' <<<"$to_copy")
             for lib in $lib_paths; do
-              log "found library $lib"
-              cp "$lib" "$out/lib/"
+              case "$lib" in
+        '' + lib.optionalString enableStatic ''
+                *.a)
+                  log "found static library $lib"
+                  cp "$lib" "$out/lib/"
+                  ;;
+        '' + lib.optionalString enableShared ''
+                *.dll)
+                  log "found windows dynamic library $lib"
+                  cp "$lib" "$out/bin/"
+                  ;;
+                *.so)
+                  log "found linux shared object $lib"
+                  cp "$lib" "$out/lib/"
+                  ;;
+                *.dylib)
+                  log "found macOS dynamic library $lib"
+                  cp "$lib" "$out/lib/"
+                  ;;
+        '' + ''
+              esac
             done
           done < <(jq -cMr "$cargo_libs_jq_filter" <"$cargo_build_output_json")
         else
