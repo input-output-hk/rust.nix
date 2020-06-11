@@ -408,6 +408,7 @@ let
                 *.dll)
                   log "found windows dynamic library $lib"
                   cp "$lib" "$out/bin/"
+                  cp "$lib" "$out/lib/"
                   ;;
                 *.so)
                   log "found linux shared object $lib"
