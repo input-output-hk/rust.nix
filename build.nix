@@ -16,9 +16,9 @@
 , copyLibs
 , copyLibsFilter
 # Copy static libs
-, enableStatic ? true
+, enableStatic
 # Copy shared libs
-, enableShared ? true
+, enableShared
 
 , doDoc
 , doDocFail
@@ -398,12 +398,13 @@ let
             lib_paths=$(jq -cMr '.filenames[]' <<<"$to_copy")
             for lib in $lib_paths; do
               case "$lib" in
-        '' + lib.optionalString enableStatic ''
+        ${lib.optionalString enableStatic ''
                 *.a)
                   log "found static library $lib"
                   cp "$lib" "$out/lib/"
                   ;;
-        '' + lib.optionalString enableShared ''
+        ''}
+        ${lib.optionalString enableShared ''
                 *.dll)
                   log "found windows dynamic library $lib"
                   cp "$lib" "$out/bin/"
@@ -416,7 +417,7 @@ let
                   log "found macOS dynamic library $lib"
                   cp "$lib" "$out/lib/"
                   ;;
-        '' + ''
+        ''}
               esac
             done
           done < <(jq -cMr "$cargo_libs_jq_filter" <"$cargo_build_output_json")

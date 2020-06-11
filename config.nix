@@ -90,6 +90,8 @@ let
     # default `cargoBuildOptions`.
     copyBins = attrs0.copyBins or true;
     copyLibs = attrs0.copyLibs or true;
+    enableStatic = attrs0.enableStatic or true;
+    enableShared = attrs0.enableShared or true;
 
     # A [`jq`](https://stedolan.github.io/jq) filter for selecting which build
     # artifacts to release. This is run on cargo's
@@ -193,6 +195,9 @@ let
       copyLibs
       copyLibsFilter
       copyTarget
+
+      enableShared
+      enableStatic
 
       cargoTestCommands
       cargoTestOptions
