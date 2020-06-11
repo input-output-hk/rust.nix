@@ -403,6 +403,10 @@ let
                   log "found static library $lib"
                   cp "$lib" "$out/lib/"
                   ;;
+                *.lib)
+                  log "found static library $lib"
+                  cp "$lib" "$out/lib/"
+                  ;;
         ''}
         ${lib.optionalString enableShared ''
                 *.dll)
