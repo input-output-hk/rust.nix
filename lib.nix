@@ -79,35 +79,43 @@ rec
     , cargolock
     }:
       let
-        tomlDependencies = cargotoml:
-          lib.filter (x: ! isNull x) (
+      tomlDependencies = cargotoml:
+        lib.filter (x: ! isNull x) (
           lib.mapAttrsToList
             (k: v:
               if ! (lib.isAttrs v && builtins.hasAttr "git" v)
               then null
-              else lib.filterAttrs (n: _: n == "rev" || n == "tag" || n == "branch") v //
-                { name = k;
-                  url = v.git;
-                  key = v.rev or v.tag or v.branch or
-                        (throw "No 'rev', 'tag' or 'branch' available to specify key");
+              else
+                let
+                  # Use the 'package' attribute if it exists, which means this is a renamed dependency
+                  # https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#renaming-dependencies-in-cargotoml
+                  key = v.package or k;
+                  query = p: p.name == key && (lib.substring 0 (4 + lib.stringLength v.git) p.source) == "git+${v.git}";
+                  extractRevision = url: lib.last (lib.splitString "#" url);
+                  parseLock = lock: rec { inherit (lock) name source; revision = extractRevision source; };
+                  packageLocks = builtins.map parseLock (lib.filter query cargolock.package);
+                  matchByName = lib.findFirst (p: p.name == key) null packageLocks;
+                  # Cargo.lock revision is prioritized, because in Cargo.toml short revisions are allowed
+                  val = v // { rev = matchByName.revision or v.rev or null; };
+                in
+                lib.filterAttrs (n: _: n == "rev" || n == "tag" || n == "branch") val //
+                {
+                  name = key;
+                  url = val.git;
+                  key = val.rev or val.tag or val.branch or
+                    (throw "No 'rev', 'tag' or 'branch' available to specify key, nor a git revision was found in Cargo.lock");
                   checkout = builtins.fetchGit ({
-                    url = v.git;
-                  } // lib.optionalAttrs (v ? rev) {
-                    rev = let
-                            query = p: p.name == k && (lib.substring 0 (4 + lib.stringLength v.git) p.source) == "git+${v.git}";
-                            extractRevision = url: lib.last (lib.splitString "#" url);
-                            parseLock = lock: rec { inherit (lock) name source; revision = extractRevision source; };
-                            packageLocks = builtins.map parseLock (lib.filter query cargolock.package);
-                            match = lib.findFirst (p: lib.substring 0 7 p.revision == lib.substring 0 7 v.rev) null packageLocks;
-                          in
-                            if ! (isNull match) then match.revision else v.rev;
-                  } // lib.optionalAttrs (v ? branch) {
-                    ref = v.branch;
-                  } // lib.optionalAttrs (v ? tag) {
-                    ref = v.tag;
+                    url = val.git;
+                  } // lib.optionalAttrs (val ? rev) {
+                    rev = val.rev;
+                    ref = val.rev;
+                  } // lib.optionalAttrs (val ? branch) {
+                    ref = val.branch;
+                  } // lib.optionalAttrs (val ? tag) {
+                    ref = val.tag;
                   });
                 }
-            ) cargotoml.dependencies or {});
+            ) cargotoml.dependencies or { });
       in
         lib.mapAttrs (_: tomlDependencies) cargotomls;
 
@@ -116,7 +124,8 @@ rec
     { cargoconfig   # string
     , cargotomls   # attrset
     , cargolock   # attrset
-    , patchedSources # list of paths that should be copied to the output
+    , copySources # list of paths that should be copied to the output
+    , copySourcesFrom # path from which to copy ${copySources}
     }:
       let
         config = writeText "config" cargoconfig;
@@ -126,7 +135,9 @@ rec
             attrs =
               # Since we pretend everything is a lib, we remove any mentions
               # of binaries
-              removeAttrs cargotoml [ "bin" "example" "lib" "test" "bench" ];
+              removeAttrs cargotoml [ "bin" "example" "lib" "test" "bench" "default-run" ]
+                // lib.optionalAttrs (builtins.hasAttr "package" cargotoml) ({ package = removeAttrs cargotoml.package [ "default-run" ] ; })
+                ;
           in
             attrs // lib.optionalAttrs (lib.hasAttr "package" attrs) {
               package = removeAttrs attrs.package [ "build" ];
@@ -140,15 +151,18 @@ rec
 
       in
         runCommand "dummy-src"
-          { inherit patchedSources cargotomlss; }
+          { inherit copySources copySourcesFrom cargotomlss; }
           ''
             mkdir -p $out/.cargo
             ${lib.optionalString (! isNull cargoconfig) "cp ${config} $out/.cargo/config"}
             cp ${cargolock'} $out/Cargo.lock
 
-            for p in $patchedSources; do
+            for p in $copySources; do
               echo "Copying patched source $p to $out..."
-              cp -R "$p" "$out/"
+              # Create all the directories but $p itself, so `cp -R` does the
+              # right thing below
+              mkdir -p "$out/$(dirname "$p")"
+              cp --no-preserve=mode -R "$copySourcesFrom/$p" "$out/$p"
             done
 
             for tuple in $cargotomlss; do

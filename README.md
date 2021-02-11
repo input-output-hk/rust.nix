@@ -55,6 +55,7 @@ it is converted to an attribute set equivalent to `{ root = theArg; }`.
 | `doDoc` | When true, `cargo doc` is run and a new output `doc` is generated. Default: `false` |
 | `release` | When true, all cargo builds are run with `--release`. The environment variable `cargo_release` is set to `--release` iff this option is set. Default: `true` |
 | `override` | An override for all derivations involved in the build. Default: `(x: x)` |
+| `overrideMain` | An override for the top-level (last, main) derivation. If both `override` and `overrideMain` are specified, _both_ will be applied to the top-level derivation. Default: `(x: x)` |
 | `singleStep` | When true, no intermediary (dependency-only) build is run. Enabling `singleStep` greatly reduces the incrementality of the builds. Default: `false` |
 | `targets` | The targets to build if the `Cargo.toml` is a virtual manifest. |
 | `copyBins` | When true, the resulting binaries are copied to `$out/bin`. <br/> Note: this relies on cargo's `--message-format` argument, set in the default `cargoBuildOptions`. Default: `true` |
@@ -98,3 +99,94 @@ pkgs.rust-nix.buildPackage ./my-package
 
 [cargo]: https://crates.io/
 [niv]: https://github.com/nmattia/niv
+
+## Using with Nix Flakes
+
+Copy this `flake.nix` into your repo.
+
+``` nix
+{
+  inputs = {
+    utils.url = "github:numtide/flake-utils";
+    naersk.url = "github:nmattia/naersk";
+  };
+
+  outputs = { self, nixpkgs, utils, naersk }:
+    utils.lib.eachDefaultSystem (system: let
+      pkgs = nixpkgs.legacyPackages."${system}";
+      naersk-lib = naersk.lib."${system}";
+    in rec {
+      # `nix build`
+      packages.my-project = naersk-lib.buildPackage {
+        pname = "my-project";
+        root = ./.;
+      };
+      defaultPackage = packages.my-project;
+
+      # `nix run`
+      apps.my-project = utils.lib.mkApp {
+        drv = packages.my-project;
+      };
+      defaultApp = apps.my-project;
+
+      # `nix develop`
+      devShell = pkgs.mkShell {
+        nativeBuildInputs = with pkgs; [ rustc cargo ];
+      };
+    });
+}
+```
+
+If you want to use a specific toolchain version instead of the latest stable
+available in nixpkgs, you can use mozilla's nixpkgs overlay in your flake.
+
+``` nix
+{
+  inputs = {
+    utils.url = "github:numtide/flake-utils";
+    naersk.url = "github:nmattia/naersk";
+    mozillapkgs = {
+      url = "github:mozilla/nixpkgs-mozilla";
+      flake = false;
+    };
+  };
+
+  outputs = { self, nixpkgs, utils, naersk, mozillapkgs }:
+    utils.lib.eachDefaultSystem (system: let
+      pkgs = nixpkgs.legacyPackages."${system}";
+
+      # Get a specific rust version
+      mozilla = pkgs.callPackage (mozillapkgs + "/package-set.nix") {};
+      rust = (mozilla.rustChannelOf {
+        date = "2020-01-01"; # get the current date with `date -I`
+        channel = "nightly";
+        sha256 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+      }).rust;
+
+      # Override the version used in naersk
+      naersk-lib = naersk.lib."${system}".override {
+        cargo = rust;
+        rustc = rust;
+      };
+    in rec {
+      # `nix build`
+      packages.my-project = naersk-lib.buildPackage {
+        pname = "my-project";
+        root = ./.;
+      };
+      defaultPackage = packages.my-project;
+
+      # `nix run`
+      apps.my-project = utils.lib.mkApp {
+        drv = packages.my-project;
+      };
+      defaultApp = apps.my-project;
+
+      # `nix develop`
+      devShell = pkgs.mkShell {
+        # supply the specific rust version
+        nativeBuildInputs = [ rust ];
+      };
+    });
+}
+```

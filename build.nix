@@ -116,17 +116,22 @@ let
             | grep -m 1 "^name\W" \
             | grep -oP '(?<=").+(?=")' \
             || true)
-          if [ -n "$name" ]; then
+          version=$(cat $toml \
+            | sed -n -e '/\[package\]/,$p' \
+            | grep -m 1 "^version\W" \
+            | grep -oP '(?<=").+(?=")' \
+            || true)
+          if [ -n "$name" -a -n "$version" ]; then
             # Most filesystmes have a maximum filename length of 255
-            key="$(echo "$name-$key" | head -c 255)"
-            log "$url Found crate '$name' ($key)"
-            if [ -d "$out/$key" ]; then
-              log "Crate was already unpacked at $out/$key"
+            nkey="$(echo "$name-$version-$key" | head -c 255)"
+            log "$url Found crate '$name-$version' ($nkey)"
+            if [ -d "$out/$nkey" ]; then
+              log "Crate was already unpacked at $out/$nkey"
             else
-              cp -r $(dirname $toml) $out/$key
-              chmod +w "$out/$key"
-              echo '{"package":null,"files":{}}' > $out/$key/.cargo-checksum.json
-              log "Crate unpacked at $out/$key"
+              cp -r $(dirname $toml) $out/$nkey
+              chmod +w "$out/$nkey"
+              echo '{"package":null,"files":{}}' > $out/$nkey/.cargo-checksum.json
+              log "Crate unpacked at $out/$nkey"
             fi
           fi
         done <<< "$tomls"
@@ -205,7 +210,7 @@ let
       buildPackages.pkgsBuildBuild.targetPackages.stdenv.cc
     ] ++ nativeBuildInputs;
 
-    buildInputs = stdenv.lib.optionals stdenv.isDarwin [
+    buildInputs = lib.optionals stdenv.isDarwin [
       darwin.Security
       darwin.apple_sdk.frameworks.CoreServices
       darwin.cf-private
@@ -361,7 +366,7 @@ let
       # Remove references to the source derivation to reduce closure size
             match='<meta name="description" content="Source to the Rust file `${builtins.storeDir}[^`]*`.">'
       replacement='<meta name="description" content="Source to the Rust file removed to reduce Nix closure size.">'
-      find target/doc -name "*\.rs\.html" -exec sed -i "s|$match|$replacement|" {} +
+      find target/doc ''${CARGO_BUILD_TARGET:+target/$CARGO_BUILD_TARGET/doc} -name "*\.rs\.html" -exec sed -i "s|$match|$replacement|" {} +
     ''}
 
       runHook postDoc
@@ -447,6 +452,9 @@ let
 
         ${lib.optionalString (doDoc && copyDocsToSeparateOutput) ''
         cp -r target/doc $doc
+        if [[ -n "$CARGO_BUILD_TARGET" && -d "target/$CARGO_BUILD_TARGET/doc" ]]; then
+          cp -r target/$CARGO_BUILD_TARGET/doc/. $doc/
+        fi
       ''}
 
         runHook postInstall
