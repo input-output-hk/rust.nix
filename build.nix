@@ -163,7 +163,7 @@ let
       target.${buildPackages.rust.toRustTarget targetPlatform} =
         (
           { linker = "${pkgsBuildTarget.targetPackages.stdenv.cc}/bin/${pkgsBuildTarget.targetPackages.stdenv.cc.targetPrefix}cc"; }
-          // stdenv.lib.optionalAttrs (stdenv.hostPlatform.isMusl && stdenv.hostPlatform.isAarch64)
+          // lib.optionalAttrs (stdenv.hostPlatform.isMusl && stdenv.hostPlatform.isAarch64)
           # https://github.com/rust-lang/rust/issues/46651#issuecomment-433611633
           { rustflags = [ "-C" "target-feature=+crt-static" "-C" "link-arg=-lgcc" ]; }
         );
@@ -224,7 +224,7 @@ let
     # gcc.
     #
     # See also overlays/rust-windows-threads.nix. Both should be in sync.
-    NIX_x86_64_w64_mingw32_LDFLAGS = stdenv.lib.optionals targetPlatform.isWindows [
+    NIX_x86_64_w64_mingw32_LDFLAGS = lib.optionals targetPlatform.isWindows [
         "-L${pkgsBuildTarget.targetPackages.windows.mingw_w64_pthreads.overrideDerivation (_ : { dontDisableStatic = true; })}/lib"
         "-L${pkgsBuildTarget.targetPackages.windows.mcfgthreads}/lib"
         "-lmcfgthread"
