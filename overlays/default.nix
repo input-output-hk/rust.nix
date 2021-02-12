@@ -1,6 +1,6 @@
 [
     (import ./rust-nix.nix)
-    (import ./rust-version.nix)
+    # (import ./rust-version.nix)
     # rust needs some platform rewrite.
     (import ./rust-windows-targetPlatform.nix)
     (import ./rust-musl.nix)
