@@ -17,10 +17,10 @@ let
     name = attrs0.name or null;
     # The version of the derivation.
     version = attrs0.version or null;
-    # Used by `naersk` as source input to the derivation. When `root` is not
+    # Used by `rust.nix` as source input to the derivation. When `root` is not
     # set, `src` is also used to discover the `Cargo.toml` and `Cargo.lock`.
     src = attrs0.src or null;
-    # Used by `naersk` to read the `Cargo.toml` and `Cargo.lock` files. May
+    # Used by `rust.nix` to read the `Cargo.toml` and `Cargo.lock` files. May
     # be different from `src`. When `src` is not set, `root` is (indirectly)
     # used as `src`.
     root = attrs0.root or null;
@@ -33,7 +33,7 @@ let
     # Options passed to cargo build, i.e. `cargo build <OPTS>`. These options
     # can be accessed during the build through the environment variable
     # `cargo_build_options`. <br/>
-    # Note: naersk relies on the `--out-dir out` option and the
+    # Note: rust.nix relies on the `--out-dir out` option and the
     # `--message-format` option. The `$cargo_message_format` variable is set
     # based on the cargo version.<br/>
     # Note: these values are not (shell) escaped, meaning that you can use
@@ -316,7 +316,7 @@ let
       let
         mkRelative = po:
           if lib.hasPrefix "/" po.path
-          then throw "'${toString src}/Cargo.toml' contains the absolute path '${toString po.path}' which is not allowed under a [patch] section by naersk. Please make it relative to '${toString src}'"
+          then throw "'${toString src}/Cargo.toml' contains the absolute path '${toString po.path}' which is not allowed under a [patch] section by rust.nix. Please make it relative to '${toString src}'"
           else po.path;
       in
         arg.copySources or []
