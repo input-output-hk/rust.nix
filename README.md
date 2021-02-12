@@ -108,19 +108,20 @@ Copy this `flake.nix` into your repo.
 {
   inputs = {
     utils.url = "github:numtide/flake-utils";
-    naersk.url = "github:nmattia/naersk";
+    rust-nix.url = "github:input-output-hk/rust.nix";
   };
 
-  outputs = { self, nixpkgs, utils, naersk }:
+  outputs = { self, nixpkgs, utils, rust }:
     utils.lib.eachDefaultSystem (system: let
-      pkgs = nixpkgs.legacyPackages."${system}";
-      naersk-lib = naersk.lib."${system}";
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [
+          rust-nix.overlay
+        ];
+      };
     in rec {
       # `nix build`
-      packages.my-project = naersk-lib.buildPackage {
-        pname = "my-project";
-        root = ./.;
-      };
+      packages.my-project = pkgs.rust-nix.buildPackage self;
       defaultPackage = packages.my-project;
 
       # `nix run`
@@ -144,14 +145,14 @@ available in nixpkgs, you can use mozilla's nixpkgs overlay in your flake.
 {
   inputs = {
     utils.url = "github:numtide/flake-utils";
-    naersk.url = "github:nmattia/naersk";
+    rust-nix.url = "github:input-output-hk/rust.nix";
     mozillapkgs = {
       url = "github:mozilla/nixpkgs-mozilla";
       flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, utils, naersk, mozillapkgs }:
+  outputs = { self, nixpkgs, utils, rust-nix, mozillapkgs }:
     utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages."${system}";
 
@@ -163,14 +164,14 @@ available in nixpkgs, you can use mozilla's nixpkgs overlay in your flake.
         sha256 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       }).rust;
 
-      # Override the version used in naersk
-      naersk-lib = naersk.lib."${system}".override {
+      # Override the version used in rust.nix
+      rust-lib = rust-nix.lib."${system}".override {
         cargo = rust;
         rustc = rust;
       };
     in rec {
       # `nix build`
-      packages.my-project = naersk-lib.buildPackage {
+      packages.my-project = rust-lib.buildPackage {
         pname = "my-project";
         root = ./.;
       };
