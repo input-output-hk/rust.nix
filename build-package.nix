@@ -48,7 +48,7 @@ let
             pname = "${config.packageName}-deps";
             src = libb.dummySrc {
               inherit cargoconfig;
-              inherit (config) cargolock cargotomls patchedSources;
+              inherit (config) cargolock cargotomls copySources copySourcesFrom;
             };
             inherit (config) userAttrs;
             # TODO: custom cargoTestCommands should not be needed here
@@ -62,12 +62,16 @@ let
 
       # the top-level build
       buildTopLevel =
-        build
-          {
-            pname = config.packageName;
-            inherit (config) userAttrs src;
-            builtDependencies = lib.optional (! config.isSingleStep) buildDeps;
-          };
+        let
+          drv =
+            build
+              {
+                pname = config.packageName;
+                inherit (config) userAttrs src;
+                builtDependencies = lib.optional (! config.isSingleStep) buildDeps;
+              };
+        in
+          drv.overrideAttrs config.overrideMain;
     in
       buildTopLevel;
 in
