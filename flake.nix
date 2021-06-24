@@ -9,6 +9,6 @@
       # rust.nix is not a package, not an app, not a module... It's just a Library
       lib = forAllSystems (system: nixpkgs.legacyPackages."${system}".callPackage ./default.nix { });
       # Useful when composing with other flakes
-      overlay = import self;
+      overlay = nixpkgs.lib.composeManyExtensions (import ./overlays);
     };
 }
